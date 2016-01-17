@@ -1,7 +1,7 @@
 import https from 'https';
-import detectIndent from 'detect-indent';
 import _ from 'underscore';
 import Promise from 'promise';
+import detectSpaceAfterFunctionName from './detectSpaceAfterFunctionName.js';
 
 export default function TabsOrSpaces(args) {
 
@@ -41,7 +41,7 @@ export default function TabsOrSpaces(args) {
     }
 
     function analyseRepo(repoName) {
-        reposStats[repoName] = { types: [], amounts: [] };
+        reposStats[repoName] = { noSpaceAfterFunctionNameCount: 0, oneSpaceAfterFunctionNameCount: 0};
 
         https.request(
             getOptions('api.github.com', '/search/code?q=repo:' + repoName + '+language:' + language),
@@ -52,10 +52,14 @@ export default function TabsOrSpaces(args) {
     function analyseFiles(repo, response) {
         var files = JSON.parse(response).items;
 
+        // Ignores files ending with .min.js and -min.js
+        files = _.filter(files, file => !file.path.endsWith('.min.js') && !file.path.endsWith('-min.js'));
+
         if (!files || files.length === 0) {
             reposLength -= 1;
             return;
         }
+
         reposStats[repo].files = files.length;
 
         for (var i = 0; i < files.length; i ++)
@@ -66,19 +70,21 @@ export default function TabsOrSpaces(args) {
         var repoName = file.repository.full_name;
         var options = getOptions('raw.githubusercontent.com', '/' + repoName + '/master/' + encodeURIComponent(file.path));
 
-        https.request(options, constructResponseAnd(detectFileIndent, repoName)).end();
+        https.request(options, constructResponseAnd(detectFileSpaceAfterFunctionName, {repoName: repoName, file: file.path})).end();
     }
 
-    function detectFileIndent(repo, response) {
-        saveStatistics(repo, detectIndent(response));
+    function detectFileSpaceAfterFunctionName(params, response) {
+        console.log('repo:', params.repoName, 'file:', params.file);
+        saveStatistics(params.repoName, detectSpaceAfterFunctionName(response));
     }
 
-    function saveStatistics(repo, indent) {
-        if (indent.type !== null) {
-            reposStats[repo].types.push(indent.type);
-            reposStats[repo].amounts.push(indent.amount);
-        }
-        reposStats[repo].files --;
+    function saveStatistics(repo, spaceAfterFunctionName) {
+        console.log('noSpaceAfterFunctionNameCount =', spaceAfterFunctionName.noSpaceAfterFunctionNameCount);
+        console.log('oneSpaceAfterFunctionNameCount =', spaceAfterFunctionName.oneSpaceAfterFunctionNameCount);
+
+        reposStats[repo].noSpaceAfterFunctionNameCount += spaceAfterFunctionName.noSpaceAfterFunctionNameCount;
+        reposStats[repo].oneSpaceAfterFunctionNameCount += spaceAfterFunctionName.oneSpaceAfterFunctionNameCount;
+        reposStats[repo].files--;
 
         if (reposStats[repo].files === 0)
             pushRepoStatistics(repo);
@@ -88,10 +94,23 @@ export default function TabsOrSpaces(args) {
     }
 
     function pushRepoStatistics(repo) {
+        var noSpace = reposStats[repo].noSpaceAfterFunctionNameCount;
+        var oneSpace = reposStats[repo].oneSpaceAfterFunctionNameCount;
+
+        var type;
+        if (noSpace > oneSpace) {
+            type = 'noSpace';
+        } else if (noSpace == oneSpace) {
+            type = 'unknown';
+        } else {
+            type = 'oneSpace';
+        }
+
         results.push({
             repo: repo,
-            type: _.chain(reposStats[repo].types).countBy().pairs().max(_.last).head().value(),
-            amount: _.chain(reposStats[repo].amounts).countBy().pairs().max(_.last).head().value()
+            type: type,
+            noSpaceAfterFunctionNameCount: noSpace,
+            oneSpaceAfterFunctionNameCount: oneSpace
         });
 
         console.log('Repos done with ' + results.length + ' of ' + reposLength);

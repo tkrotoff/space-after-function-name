@@ -1,5 +1,13 @@
 import TabsOrSpaces from './TabsOrSpaces';
 
+var noSpaceLines = 0;
+var oneSpaceLines = 0;
+var reposWithProperFiles = 0;
+var reposWithResults = 0;
+var noSpaceRepos = 0;
+var oneSpaceRepos = 0;
+var unknownStyleRepos = 0;
+
 export default class Analyser {
 
     constructor(language, db, githubToken) {
@@ -25,7 +33,6 @@ export default class Analyser {
             console.log('Over 500 repos analysed, aborting mission');
             process.exit();
         }
-        console.log('Using TabsOrSpaces');
 
         TabsOrSpaces(this.options()).analyse().then((results) => this.collectAndSave(results)).catch(this.handleShitStorm);
     }
@@ -50,31 +57,42 @@ export default class Analyser {
     }
 
     collectAndSave(results) {
-        console.log('Got these results from TabsOrSpaces:');
+        console.log('=> Got these results:');
         console.log(results);
 
         var analysedRepos = this.snapshot.analysedRepos ? this.snapshot.analysedRepos + this.analyseRepos : 30;
-        var stylesCount = this.snapshot.stylesCount || {};
-        var topReposOfStyles = this.snapshot.topReposOfStyles || {}
 
         for (var i = 0; i < results.length; i ++) {
             var repo = results[i];
-            var type = repo.type + '-' + repo.amount;
+            noSpaceLines += repo.noSpaceAfterFunctionNameCount;
+            oneSpaceLines += repo.oneSpaceAfterFunctionNameCount;
 
-            if (!topReposOfStyles[type])
-                topReposOfStyles[type] = [repo.repo];
-            else if (topReposOfStyles[type].length < 3)
-                topReposOfStyles[type].push(repo.repo);
-
-            if (repo.type && repo.amount)
-                stylesCount[type] = stylesCount[type] ? stylesCount[type] + 1 : 1;
+            reposWithProperFiles++;
+            switch (repo.type) {
+                case 'noSpace':
+                    noSpaceRepos++;
+                    break;
+                case 'oneSpace':
+                    oneSpaceRepos++;
+                    break;
+                case 'unknown':
+                    unknownStyleRepos++;
+                    break;
+                default:
+                    throw new Error('Unknown type:', repo.type);
+            }
         }
         console.log('Saving info to Database');
 
         this.db.write({
-            stylesCount: stylesCount,
             analysedRepos: analysedRepos,
-            topReposOfStyles: topReposOfStyles
+            noSpaceAfterFunctionNameLines: noSpaceLines,
+            oneSpaceAfterFunctionNameLines: oneSpaceLines,
+            reposWithProperFiles: reposWithProperFiles,
+            reposWithResults: noSpaceRepos + oneSpaceRepos,
+            noSpaceAfterFunctionNameRepos: noSpaceRepos,
+            oneSpaceAfterFunctionNameRepos: oneSpaceRepos,
+            unknownStyleRepos: unknownStyleRepos
         });
     }
 
