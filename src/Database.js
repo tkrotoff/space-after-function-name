@@ -1,21 +1,4 @@
-import Firebase from 'firebase';
 import jsonfile from 'jsonfile';
-
-export class FirebaseWrapper {
-
-    constructor(url, token) {
-        this.ref = new Firebase(url);
-        this.ref.authWithCustomToken(token, function () {});
-    }
-
-    readAnd(callback) {
-        this.ref.once('value', (snapshot) => callback(snapshot.val()));
-    }
-
-    write(data) {
-        this.ref.set(data);
-    }
-}
 
 export class File {
 
